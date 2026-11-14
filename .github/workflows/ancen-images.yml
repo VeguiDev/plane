@@ -74,6 +74,8 @@ jobs:
           mkdir /tmp/image-layout
           tar -xf /tmp/image.tar -C /tmp/image-layout
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_SECRET_CONFIG: ${{ github.workspace }}/trivy-secret.yaml
         with:
           input: /tmp/image-layout
           severity: CRITICAL,HIGH

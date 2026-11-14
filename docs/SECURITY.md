@@ -33,6 +33,18 @@ imágenes. Upstream: https://github.com/makeplane/plane. No mecanismos Enterpris
   favicons; CI incluye las pruebas existentes de enlaces/SSRF además de OIDC.
   No se habilita `NOSTRICT` ni se silencian los hallazgos del escáner.
 
+### Fixture público en el bundle de Space
+
+`happy-dom` 21.0.4 incorpora una clave TLS pública de prueba en
+`src/fetch/certificate/FetchHTTPSCertificate.ts`, incluida por el codec HTML
+server-side de Tiptap. Se comprobó contra el archivo original publicado en
+`capricorn86/happy-dom` y no proviene de authentik ni del despliegue.
+`trivy-secret.yaml` permite únicamente el PEM completo y exacto de ese fixture
+(SHA256 sin salto final: `7f7f8c83ded111336dca167452776b8b6c35e4223882103df5edeb55875a2d41`).
+No se excluyen rutas ni se desactiva el detector de claves privadas; otras claves
+y vulnerabilidades siguen bloqueando la publicación. Nunca usar ese fixture como
+certificado de producción ni credencial. Revisar la excepción al actualizar happy-dom.
+
 No hay logout global ni back-channel logout IdP; revocar sesión Plane o desactivar
 usuario para efecto inmediato. Email cambiado no migra identidades ni membresías.
 La política del issuer, DNS/TLS, correo verificado y acceso a consola son fronteras
