@@ -22,11 +22,11 @@ jobs:
           POSTGRES_PASSWORD: isolated-test-only
           POSTGRES_DB: oidctest
         ports: ["5432:5432"]
-        options: --health-cmd='pg_isready -U oidctest' --health-interval=10s --health-timeout=5s --health-retries=10
+        options: --health-cmd="pg_isready -U oidctest" --health-interval=10s --health-timeout=5s --health-retries=10
       redis:
         image: valkey/valkey:7.2.11-alpine
         ports: ["6379:6379"]
-        options: --health-cmd='valkey-cli ping' --health-interval=10s --health-timeout=5s --health-retries=10
+        options: --health-cmd="valkey-cli ping" --health-interval=10s --health-timeout=5s --health-retries=10
     env:
       DJANGO_SETTINGS_MODULE: plane.settings.test
       DATABASE_URL: postgresql://oidctest:isolated-test-only@localhost:5432/oidctest
