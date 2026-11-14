@@ -22,6 +22,17 @@ imágenes. Upstream: https://github.com/makeplane/plane. No mecanismos Enterpris
 
 ## Límites y obligaciones operativas
 
+### Parches de dependencias del candidato inicial
+
+- Caddy: `golang.org/x/net` 0.62.0 corrige CVE-2026-78661; se actualizan
+  conjuntamente `x/crypto` 0.58.0 y `x/text` 0.43.0 según su go.mod. Los
+  Dockerfiles verifican las versiones de x/net y gRPC en el binario construido.
+- Backend: Soup Sieve 4.0.0 corrige CVE-2026-126190 y CVE-2026-126191.
+  La actualización mayor fue revisada: endurece `:has()` y modifica selección
+  dentro de `template`/`iframe`. Plane solo usa un selector CSS simple para
+  favicons; CI incluye las pruebas existentes de enlaces/SSRF además de OIDC.
+  No se habilita `NOSTRICT` ni se silencian los hallazgos del escáner.
+
 No hay logout global ni back-channel logout IdP; revocar sesión Plane o desactivar
 usuario para efecto inmediato. Email cambiado no migra identidades ni membresías.
 La política del issuer, DNS/TLS, correo verificado y acceso a consola son fronteras

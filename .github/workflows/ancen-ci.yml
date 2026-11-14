@@ -45,7 +45,7 @@ jobs:
       - run: uv run python -m unittest discover -s ../../scripts/ancen -p 'test_*.py'
       - run: uv run ruff check plane/authentication/oidc.py plane/authentication/middleware/oidc.py plane/authentication/views/oidc.py plane/authentication/management plane/db/models/oidc.py plane/settings/oidc.py plane/tests/oidc
       - run: uv run python manage.py makemigrations --check --dry-run
-      - run: uv run pytest plane/tests/oidc/ -q
+      - run: uv run pytest plane/tests/oidc/ plane/tests/unit/bg_tasks/test_ssrf_advisories.py -q
   frontend:
     runs-on: ubuntu-24.04
     steps:
