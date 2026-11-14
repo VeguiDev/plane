@@ -19,6 +19,8 @@ import { Banner } from "@makeplane/propel/components/banner";
 import { FormHeader } from "@/components/instance/form-header";
 // hooks
 import { useCsrfToken } from "@/hooks/use-csrf-token";
+import { useInstance } from "@/hooks/store/use-instance";
+import { observer } from "mobx-react";
 import { AuthBanner } from "./auth-banner";
 import { AuthHeader } from "./auth-header";
 import { authErrorHandler } from "./auth-helpers";
@@ -48,7 +50,8 @@ const defaultFromData: TFormData = {
   password: "",
 };
 
-export function InstanceSignInForm() {
+export const InstanceSignInForm = observer(function InstanceSignInForm() {
+  const { config } = useInstance();
   // search params
   const searchParams = useSearchParams();
   const emailParam = searchParams.get("email") || undefined;
@@ -111,74 +114,86 @@ export function InstanceSignInForm() {
             heading="Manage your Plane instance"
             subHeading="Configure instance-wide settings to secure your instance"
           />
-          <form
-            className="space-y-4"
-            method="POST"
-            action={`${API_BASE_URL}/api/instances/admins/sign-in/`}
-            onSubmit={() => setIsSubmitting(true)}
-            onError={() => setIsSubmitting(false)}
-          >
-            {errorData.type && errorData?.message ? (
-              <Banner placement="inline" variant="danger" description={errorData?.message} />
-            ) : (
-              <>{errorInfo && <AuthBanner bannerData={errorInfo} handleBannerData={setErrorInfo} />}</>
-            )}
-            <input type="hidden" name="csrfmiddlewaretoken" value={csrfToken} />
-
-            <InputField
+          {config?.is_oidc_enabled && config?.oidc_show_button && (
+            <Button
+              type="button"
+              variant="primary"
               size="lg"
-              id="email"
-              name="email"
-              type="email"
-              placeholder="name@company.com"
-              value={formData.email}
-              onChange={(e) => handleFormChange("email", e.target.value)}
-              autoComplete="off"
-              // oxlint-disable-next-line jsx-a11y/no-autofocus -- sole primary field of a dedicated sign-in page
-              autoFocus
-              orientation="vertical"
-              label="Email"
-              required
+              stretch="full"
+              label={config.oidc_button_text || "Continuar con Ancen SSO"}
+              onClick={() => window.location.assign(`${API_BASE_URL}/api/instances/oidc/`)}
             />
+          )}
+          {(!config?.is_oidc_enabled || config?.oidc_allow_local_login) && (
+            <form
+              className="space-y-4"
+              method="POST"
+              action={`${API_BASE_URL}/api/instances/admins/sign-in/`}
+              onSubmit={() => setIsSubmitting(true)}
+              onError={() => setIsSubmitting(false)}
+            >
+              {errorData.type && errorData?.message ? (
+                <Banner placement="inline" variant="danger" description={errorData?.message} />
+              ) : (
+                <>{errorInfo && <AuthBanner bannerData={errorInfo} handleBannerData={setErrorInfo} />}</>
+              )}
+              <input type="hidden" name="csrfmiddlewaretoken" value={csrfToken} />
 
-            <InputField
-              size="lg"
-              id="password"
-              name="password"
-              type={showPassword ? "text" : "password"}
-              placeholder="Enter your password"
-              value={formData.password}
-              onChange={(e) => handleFormChange("password", e.target.value)}
-              autoComplete="off"
-              orientation="vertical"
-              label="Password"
-              required
-              endIcon={
-                <IconButton
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  aria-pressed={showPassword}
-                  icon={<Icon icon={showPassword ? HideOutline : ShowOutline} />}
-                  onClick={() => setShowPassword((visible) => !visible)}
-                />
-              }
-            />
-            <div className="py-2">
-              <Button
-                type="submit"
-                variant="primary"
+              <InputField
                 size="lg"
-                stretch="full"
-                disabled={isButtonDisabled}
-                loading={isSubmitting}
-                label="Sign in"
+                id="email"
+                name="email"
+                type="email"
+                placeholder="name@company.com"
+                value={formData.email}
+                onChange={(e) => handleFormChange("email", e.target.value)}
+                autoComplete="off"
+                // oxlint-disable-next-line jsx-a11y/no-autofocus -- sole primary field of a dedicated sign-in page
+                autoFocus
+                orientation="vertical"
+                label="Email"
+                required
               />
-            </div>
-          </form>
+
+              <InputField
+                size="lg"
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Enter your password"
+                value={formData.password}
+                onChange={(e) => handleFormChange("password", e.target.value)}
+                autoComplete="off"
+                orientation="vertical"
+                label="Password"
+                required
+                endIcon={
+                  <IconButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    icon={<Icon icon={showPassword ? HideOutline : ShowOutline} />}
+                    onClick={() => setShowPassword((visible) => !visible)}
+                  />
+                }
+              />
+              <div className="py-2">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  stretch="full"
+                  disabled={isButtonDisabled}
+                  loading={isSubmitting}
+                  label="Sign in"
+                />
+              </div>
+            </form>
+          )}
         </div>
       </div>
     </>
   );
-}
+});
