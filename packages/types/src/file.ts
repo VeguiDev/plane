@@ -20,21 +20,14 @@ export type TFileEntityInfo = {
 
 export type TFileMetaData = TFileMetaDataLite & TFileEntityInfo;
 
+export type TFileUploadData =
+  | { method: "PUT"; url: string; headers: Record<string, string> }
+  | { method?: "POST"; url: string; fields: Record<string, string> };
+
 export type TFileSignedURLResponse = {
   asset_id: string;
   asset_url: string;
-  upload_data: {
-    url: string;
-    fields: {
-      "Content-Type": string;
-      key: string;
-      "x-amz-algorithm": string;
-      "x-amz-credential": string;
-      "x-amz-date": string;
-      policy: string;
-      "x-amz-signature": string;
-    };
-  };
+  upload_data: TFileUploadData;
 };
 
 export type TDuplicateAssetData = {

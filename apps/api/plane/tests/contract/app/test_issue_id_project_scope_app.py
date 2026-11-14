@@ -57,7 +57,7 @@ def _no_side_effects(db):
         mock.patch("plane.app.views.issue.comment.issue_activity"),
         mock.patch("plane.app.views.issue.comment.base_host", return_value="http://testserver"),
     ):
-        s3.return_value.generate_presigned_post.return_value = {}
+        s3.return_value.generate_presigned_upload.return_value = {}
         yield
 
 

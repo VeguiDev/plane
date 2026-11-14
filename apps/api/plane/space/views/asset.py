@@ -18,6 +18,7 @@ from rest_framework.response import Response
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import DeployBoard, FileAsset, IssueComment
 from plane.settings.storage import S3Storage
+from plane.utils.asset_upload import requested_upload_size, validate_uploaded_asset, merge_asset_attributes
 from plane.utils.path_validator import sanitize_filename
 
 # Module imports
@@ -101,13 +102,7 @@ class EntityAssetEndpoint(BaseAPIView):
         # Get the asset
         name = sanitize_filename(request.data.get("name")) or "unnamed"
         type = request.data.get("type", "image/jpeg")
-        try:
-            size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
-        except (TypeError, ValueError):
-            return Response(
-                {"error": "Invalid size.", "status": False},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        size = requested_upload_size(request.data.get("size", settings.FILE_SIZE_LIMIT))
         entity_type = request.data.get("entity_type", "")
         # The client sends "" for a comment that does not exist yet; keep such uploads unbound
         entity_identifier = request.data.get("entity_identifier") or None
@@ -163,7 +158,7 @@ class EntityAssetEndpoint(BaseAPIView):
         # Get the presigned URL
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        presigned_url = storage.generate_presigned_upload(object_name=asset_key, file_type=type, file_size=size_limit)
         # Return the presigned URL
         return Response(
             {
@@ -191,13 +186,14 @@ class EntityAssetEndpoint(BaseAPIView):
         if asset is None:
             return Response({"error": "The requested asset could not be found."}, status=status.HTTP_404_NOT_FOUND)
         # get the storage metadata
+        validate_uploaded_asset(asset)
         asset.is_uploaded = True
         # get the storage metadata
         if not asset.storage_metadata:
             get_asset_object_metadata.delay(str(asset.id))
 
         # update the attributes
-        asset.attributes = request.data.get("attributes", asset.attributes)
+        asset.attributes = merge_asset_attributes(asset, request.data.get("attributes"))
         # save the asset
         asset.save(update_fields=["attributes", "is_uploaded"])
         return Response(status=status.HTTP_204_NO_CONTENT)

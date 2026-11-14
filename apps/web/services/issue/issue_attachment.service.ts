@@ -56,7 +56,7 @@ export class IssueAttachmentService extends APIService {
         const signedURLResponse: TIssueAttachmentUploadResponse = response?.data;
         const fileUploadPayload = generateFileUploadPayload(signedURLResponse, file);
         await this.fileUploadService.uploadFile(
-          signedURLResponse.upload_data.url,
+          signedURLResponse.upload_data,
           fileUploadPayload,
           uploadProgressHandler
         );

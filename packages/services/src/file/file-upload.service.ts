@@ -4,7 +4,9 @@
  * See the LICENSE file for details.
  */
 
-import axios from "axios";
+import axios, { isCancel } from "axios";
+import type { AxiosRequestConfig } from "axios";
+import type { TFileUploadData } from "@plane/types";
 // api service
 import { APIService } from "../api.service";
 
@@ -14,7 +16,7 @@ import { APIService } from "../api.service";
  * @extends {APIService}
  */
 export class FileUploadService extends APIService {
-  private cancelSource: any;
+  private abortController?: AbortController;
 
   constructor() {
     super("");
@@ -22,27 +24,35 @@ export class FileUploadService extends APIService {
 
   /**
    * Uploads a file to the specified signed URL
-   * @param {string} url - The URL to upload the file to
-   * @param {FormData} data - The form data to upload
+   * @param {TFileUploadData} upload - Signed method, URL and fields/headers
+   * @param {FormData | File} data - Multipart POST or binary PUT body
    * @returns {Promise<void>} Promise resolving to void
    * @throws {Error} If the request fails
    */
-  async uploadFile(url: string, data: FormData): Promise<void> {
-    this.cancelSource = axios.CancelToken.source();
-    return this.post(url, data, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-      cancelToken: this.cancelSource.token,
-      withCredentials: false,
-    })
-      .then((response) => response?.data)
+  async uploadFile(
+    upload: TFileUploadData,
+    data: FormData | File,
+    onUploadProgress?: AxiosRequestConfig["onUploadProgress"]
+  ): Promise<void> {
+    const controller = new AbortController();
+    this.abortController = controller;
+    // Do not run signed URLs through API URL normalization or attach Plane cookies.
+    return axios
+      .request({
+        url: upload.url,
+        method: upload.method ?? "POST",
+        data,
+        headers: upload.method === "PUT" ? upload.headers : { "Content-Type": "multipart/form-data" },
+        signal: controller.signal,
+        withCredentials: false,
+        onUploadProgress,
+      })
+      .then(() => undefined)
       .catch((error) => {
-        if (axios.isCancel(error)) {
-          console.log(error.message);
-        } else {
-          throw error?.response?.data;
+        if (isCancel(error)) {
+          throw error;
         }
+        throw error?.response?.data ?? error;
       });
   }
 
@@ -50,6 +60,6 @@ export class FileUploadService extends APIService {
    * Cancels the upload
    */
   cancelUpload() {
-    this.cancelSource.cancel("Upload canceled");
+    this.abortController?.abort();
   }
 }
