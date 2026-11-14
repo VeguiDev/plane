@@ -658,6 +658,8 @@ class GenericAssetEndpoint(BaseAPIView):
                 )
 
             # Update is_uploaded status
+            if request.data.get("is_uploaded", asset.is_uploaded):
+                validate_uploaded_asset(asset)
             asset.is_uploaded = request.data.get("is_uploaded", asset.is_uploaded)
 
             # Update storage metadata if not present

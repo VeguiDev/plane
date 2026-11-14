@@ -55,6 +55,41 @@ def test_user_upload_contract_and_permissions(create_user, monkeypatch, settings
         ({"ContentLength": 12, "ContentType": "image/png"}, 204),
     ],
 )
+def test_generic_put_confirmation_cannot_bypass_head(
+    api_key_client, workspace, create_user, monkeypatch, settings, mock_celery, metadata, expected
+):
+    monkeypatch.setenv("S3_UPLOAD_METHOD", "PUT")
+    settings.FILE_SIZE_LIMIT = 1024
+    asset = FileAsset.objects.create(
+        asset=f"{workspace.id}/generic.png",
+        workspace=workspace,
+        created_by=create_user,
+        size=12,
+        attributes={"type": "image/png", "size": 12},
+        entity_type="ISSUE_ATTACHMENT",
+    )
+    with patch("plane.utils.asset_upload.S3Storage") as storage:
+        storage.return_value.get_object_metadata.return_value = metadata
+        response = api_key_client.patch(
+            f"/api/v1/workspaces/{workspace.slug}/assets/{asset.id}/",
+            {"is_uploaded": True},
+            format="json",
+        )
+    assert response.status_code == expected, getattr(response, "data", None)
+    asset.refresh_from_db()
+    assert asset.is_uploaded == (expected == 204)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "metadata,expected",
+    [
+        (None, 400),
+        ({"ContentLength": 13, "ContentType": "image/png"}, 400),
+        ({"ContentLength": 12, "ContentType": "text/html"}, 400),
+        ({"ContentLength": 12, "ContentType": "image/png"}, 204),
+    ],
+)
 def test_put_confirmation_fails_closed(create_user, monkeypatch, settings, metadata, expected):
     monkeypatch.setenv("S3_UPLOAD_METHOD", "PUT")
     settings.FILE_SIZE_LIMIT = 1024
