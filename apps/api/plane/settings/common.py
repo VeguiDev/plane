@@ -345,7 +345,8 @@ if USE_MINIO and AWS_SECRET_ACCESS_KEY == "secret-key":
     )
 AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_S3_BUCKET_NAME", "uploads")
 AWS_REGION = os.environ.get("AWS_REGION", "")
-AWS_DEFAULT_ACL = "public-read"
+# R2 does not support object ACLs; presigned access keeps the bucket private.
+AWS_DEFAULT_ACL = None if os.environ.get("S3_UPLOAD_METHOD", "POST").upper() == "PUT" else "public-read"
 AWS_QUERYSTRING_AUTH = False
 AWS_S3_FILE_OVERWRITE = False
 AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL", None) or os.environ.get("MINIO_ENDPOINT_URL", None)

@@ -82,6 +82,7 @@ from plane.db.models import (
     WorkspaceMember,
 )
 from plane.settings.storage import S3Storage
+from plane.utils.asset_upload import requested_upload_size, validate_uploaded_asset
 from plane.utils.path_validator import sanitize_filename
 from plane.utils.order_queryset import (
     ACTIVITY_ORDER_BY_ALLOWLIST,
@@ -2047,13 +2048,7 @@ class IssueAttachmentListCreateAPIEndpoint(BaseAPIView):
 
         name = sanitize_filename(request.data.get("name"))
         type = request.data.get("type", False)
-        # Clients may send size as a numeric string ("53314").
-        # 1e400 parses as inf (OverflowError). Non-positive values must not
-        # reach the S3 content-length-range, which is [1, size].
-        try:
-            size = int(request.data.get("size") or 0)
-        except (TypeError, ValueError, OverflowError):
-            size = 0
+        size = requested_upload_size(request.data.get("size"))
         external_id = request.data.get("external_id")
         external_source = request.data.get("external_source")
 
@@ -2123,7 +2118,7 @@ class IssueAttachmentListCreateAPIEndpoint(BaseAPIView):
         # Get the presigned URL
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        presigned_url = storage.generate_presigned_upload(object_name=asset_key, file_type=type, file_size=size_limit)
         # Return the presigned URL
         return Response(
             {
@@ -2394,6 +2389,7 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
 
         # Send this activity only if the attachment is not uploaded before
         if not issue_attachment.is_uploaded:
+            validate_uploaded_asset(issue_attachment)
             issue_activity.delay(
                 type="attachment.activity.created",
                 requested_data=None,

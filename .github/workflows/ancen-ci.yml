@@ -42,10 +42,27 @@ jobs:
           version: "0.12.21"
           python-version: "3.12"
       - run: uv sync --locked
+      - name: Start isolated disposable object storage (no production volumes)
+        run: |
+          docker run -d --name ancen-storage-test -p 127.0.0.1:59000:9000 --tmpfs /export \
+            -e MINIO_ROOT_USER=isolated-storage-test -e MINIO_ROOT_PASSWORD=isolated-storage-test-secret \
+            pgsty/silo:RELEASE.2026-09-16T00-00-00Z server /export
+          uv run python -c 'import urllib.request,time; exec("for attempt in range(60):\n try:\n  urllib.request.urlopen(\"http://127.0.0.1:59000/minio/health/live\",timeout=2); break\n except Exception:\n  time.sleep(1)\nelse:\n raise SystemExit(\"Storage not healthy\")")'
       - run: uv run python -m unittest discover -s ../../scripts/ancen -p 'test_*.py'
-      - run: uv run ruff check plane/authentication/oidc.py plane/authentication/middleware/oidc.py plane/authentication/views/oidc.py plane/authentication/management plane/db/models/oidc.py plane/settings/oidc.py plane/tests/oidc
+      - run: uv run ruff check plane/authentication/oidc.py plane/authentication/middleware/oidc.py plane/authentication/views/oidc.py plane/authentication/management plane/db/models/oidc.py plane/settings/oidc.py plane/tests/oidc plane/settings/storage.py plane/utils/asset_upload.py plane/tests/unit/settings/test_presigned_upload.py plane/tests/unit/settings/test_upload_endpoints.py plane/tests/unit/settings/test_upload_roundtrip.py ../../scripts/ancen
       - run: uv run python manage.py makemigrations --check --dry-run
-      - run: uv run pytest plane/tests/oidc/ plane/tests/unit/bg_tasks/test_ssrf_advisories.py -q
+      - run: uv run pytest plane/tests/oidc/ plane/tests/unit/bg_tasks/test_ssrf_advisories.py plane/tests/unit/settings/ -q
+        env:
+          S3_TEST_ENDPOINT: http://127.0.0.1:59000
+      - name: Asset authorization regression tests
+        run: >-
+          uv run pytest
+          plane/tests/contract/api/test_generic_asset.py
+          plane/tests/contract/api/test_generic_asset_project_scope.py
+          plane/tests/contract/api/test_issue_attachment_size.py
+          plane/tests/contract/api/test_external_api_guest_issue_visibility.py
+          plane/tests/contract/app/test_issue_id_project_scope_app.py
+          plane/tests/contract/app/test_*asset* -q
   frontend:
     runs-on: ubuntu-24.04
     steps:
@@ -57,4 +74,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:types
       - run: pnpm check:lint
+      - run: pnpm --filter=@plane/services test
       - run: pnpm build

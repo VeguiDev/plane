@@ -33,7 +33,7 @@ def url(workspace, issue):
 @pytest.mark.django_db
 @mock.patch("plane.api.views.issue.S3Storage")
 def test_string_size_is_accepted(s3, api_key_client, workspace, issue):
-    s3.return_value.generate_presigned_post.return_value = {}
+    s3.return_value.generate_presigned_upload.return_value = {}
 
     response = api_key_client.post(
         url(workspace, issue), {"name": "a.png", "type": "image/png", "size": "53314"}, format="json"

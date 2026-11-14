@@ -3,12 +3,13 @@
 Fork open source de **Plane Community Edition**, mantenido por VeguiDev, con OIDC
 para authentik, imágenes GHCR y actualización upstream mediante PRs.
 
-**Estado: candidato 0.1.0-rc.1; no release estable ni despliegue de producción.**
+**Estado: candidato 0.1.0-rc.2; no release estable ni despliegue de producción.**
 No deshabilitar login local hasta validar SSO real y recuperación administrativa.
 Licencia AGPL-3.0; se conservan abajo la presentación y atribuciones de upstream.
 
 - [Arquitectura](docs/ARCHITECTURE.md) · [OIDC/authentik](docs/OIDC.md)
 - [GHCR, Compose, Coolify, backups y rollback](docs/DEPLOYMENT.md)
+- [Cloudflare R2 opcional: PUT, CORS y migración reversible](docs/R2.md)
 - [Mantenimiento upstream y conexión opcional de Codex](docs/UPSTREAM_SYNC.md)
 - [Seguridad](docs/SECURITY.md) · [Configuración](.env.example)
 - [Repositorio](https://github.com/VeguiDev/plane) · [Workflows](https://github.com/VeguiDev/plane/actions)

@@ -84,7 +84,7 @@ export class FileService extends APIService {
         const signedURLResponse: TFileSignedURLResponse = response?.data;
         const fileUploadPayload = generateFileUploadPayload(signedURLResponse, file);
         await this.fileUploadService.uploadFile(
-          signedURLResponse.upload_data.url,
+          signedURLResponse.upload_data,
           fileUploadPayload,
           uploadProgressHandler
         );
@@ -161,7 +161,7 @@ export class FileService extends APIService {
         const signedURLResponse: TFileSignedURLResponse = response?.data;
         const fileUploadPayload = generateFileUploadPayload(signedURLResponse, file);
         await this.fileUploadService.uploadFile(
-          signedURLResponse.upload_data.url,
+          signedURLResponse.upload_data,
           fileUploadPayload,
           uploadProgressHandler
         );
@@ -190,7 +190,7 @@ export class FileService extends APIService {
       .then(async (response) => {
         const signedURLResponse: TFileSignedURLResponse = response?.data;
         const fileUploadPayload = generateFileUploadPayload(signedURLResponse, file);
-        await this.fileUploadService.uploadFile(signedURLResponse.upload_data.url, fileUploadPayload);
+        await this.fileUploadService.uploadFile(signedURLResponse.upload_data, fileUploadPayload);
         await this.updateUserAssetUploadStatus(signedURLResponse.asset_id);
         return signedURLResponse;
       })

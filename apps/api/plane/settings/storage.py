@@ -8,6 +8,7 @@ import uuid
 
 # Django imports
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 
 # Third party imports
 import boto3
@@ -38,6 +39,9 @@ class S3Storage(S3Boto3Storage):
         self.aws_s3_endpoint_url = os.environ.get("AWS_S3_ENDPOINT_URL") or os.environ.get("MINIO_ENDPOINT_URL")
         # Use the SIGNED_URL_EXPIRATION environment variable for the expiration time (default: 3600 seconds)
         self.signed_url_expiration = int(os.environ.get("SIGNED_URL_EXPIRATION", "3600"))
+        self.upload_method = os.environ.get("S3_UPLOAD_METHOD", "POST").upper()
+        if self.upload_method not in ("POST", "PUT"):
+            raise ImproperlyConfigured("S3_UPLOAD_METHOD must be POST or PUT")
 
         if os.environ.get("USE_MINIO") == "1":
             # Determine protocol based on environment variable
@@ -64,6 +68,37 @@ class S3Storage(S3Boto3Storage):
                 endpoint_url=self.aws_s3_endpoint_url,
                 config=boto3.session.Config(signature_version="s3v4"),
             )
+
+    def generate_presigned_upload(self, object_name, file_type, file_size, expiration=None):
+        """POST policies remain the default; PUT binds both type and exact byte count."""
+        from rest_framework.exceptions import ValidationError
+
+        if (
+            isinstance(file_size, bool)
+            or not isinstance(file_size, int)
+            or not 1 <= file_size <= settings.FILE_SIZE_LIMIT
+        ):
+            raise ValidationError({"size": "File size must be within the instance upload limit."})
+        if not isinstance(file_type, str) or not file_type or "\r" in file_type or "\n" in file_type:
+            raise ValidationError({"type": "A valid content type is required."})
+        if self.upload_method == "POST":
+            response = self.generate_presigned_post(object_name, file_type, file_size, expiration)
+            if response is None:
+                raise ValidationError({"upload": "Unable to authorize upload."})
+            return {**response, "method": "POST"}
+        url = self.s3_client.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": self.aws_storage_bucket_name,
+                "Key": object_name,
+                "ContentType": file_type,
+                "ContentLength": file_size,
+            },
+            ExpiresIn=expiration if expiration is not None else self.signed_url_expiration,
+            HttpMethod="PUT",
+        )
+        # Browsers set Content-Length from the File body; JS must not set that forbidden header.
+        return {"url": url, "method": "PUT", "headers": {"Content-Type": file_type}}
 
     def generate_presigned_post(self, object_name, file_type, file_size, expiration=None):
         """Generate a presigned URL to upload an S3 object"""

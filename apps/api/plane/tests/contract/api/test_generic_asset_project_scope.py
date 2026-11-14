@@ -247,7 +247,7 @@ class TestGenericAssetPostProjectScope:
     def test_post_allowed_for_joined_project(self, api_key_client, workspace, joined_project):
         before = FileAsset.objects.count()
         with mock.patch(S3_STORAGE_PATH, autospec=True) as mock_storage:
-            mock_storage.return_value.generate_presigned_post.return_value = {"url": "https://x"}
+            mock_storage.return_value.generate_presigned_upload.return_value = {"url": "https://x"}
             response = api_key_client.post(
                 asset_list_url(workspace.slug), self._payload(joined_project.id), format="json"
             )
@@ -286,7 +286,7 @@ class TestGenericAssetExternalIdDedup:
         if project_id is not None:
             payload["project_id"] = str(project_id)
         with mock.patch(S3_STORAGE_PATH, autospec=True) as mock_storage:
-            mock_storage.return_value.generate_presigned_post.return_value = {"url": "https://x"}
+            mock_storage.return_value.generate_presigned_upload.return_value = {"url": "https://x"}
             return client.post(asset_list_url(workspace.slug), payload, format="json")
 
     @pytest.mark.django_db

@@ -1,5 +1,8 @@
 # Publicación y despliegue
 
+Para almacenamiento R2 opcional, ver [configuración, CORS y rollback](R2.md).
+POST/MinIO sigue siendo el comportamiento predeterminado; no se migran datos.
+
 ## Imágenes
 
 Ejecutar **Ancen images** sobre el commit candidato. Primero ejecuta Ancen CI
@@ -23,6 +26,13 @@ y es público; la visibilidad del repo no garantiza la de Packages. Si es privad
 el consumidor requiere una credencial `read:packages` (no reutilizar secretos de
 Actions). Verificar pull anónimo desde una máquina sin login antes de documentarlo
 como público. No hay garantía de disponibilidad hasta que el workflow termine.
+
+El pipeline candidato serializa las publicaciones y rechaza reutilizar versión o
+tags SHA ya existentes antes de construir. Para reintentar una publicación parcial,
+crear una versión candidata y un commit nuevos: no sobrescribir los anteriores.
+GHCR no garantiza que un administrador no pueda mover un tag; el identificador
+realmente inmutable para consumir una imagen es `ghcr.io/veguidev/plane-…@sha256:…`.
+Registrar esos digests y comprobar Cosign/SBOM del commit correspondiente.
 
 ## Primer despliegue
 

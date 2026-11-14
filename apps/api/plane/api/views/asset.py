@@ -17,6 +17,7 @@ from drf_spectacular.utils import OpenApiExample, OpenApiRequest
 # Module Imports
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.settings.storage import S3Storage
+from plane.utils.asset_upload import requested_upload_size, validate_uploaded_asset, merge_asset_attributes
 from plane.utils.path_validator import sanitize_filename
 from plane.db.models import FileAsset, Project, ProjectMember, User, Workspace
 from plane.app.permissions import WorkspaceUserPermission
@@ -118,7 +119,7 @@ class UserAssetEndpoint(BaseAPIView):
         # get the asset key
         name = sanitize_filename(request.data.get("name")) or "unnamed"
         type = request.data.get("type", "image/jpeg")
-        size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
+        size = requested_upload_size(request.data.get("size", settings.FILE_SIZE_LIMIT))
         entity_type = request.data.get("entity_type", False)
 
         # Check if the file size is within the limit
@@ -164,7 +165,7 @@ class UserAssetEndpoint(BaseAPIView):
         # Get the presigned URL
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        presigned_url = storage.generate_presigned_upload(object_name=asset_key, file_type=type, file_size=size_limit)
         # Return the presigned URL
         return Response(
             {
@@ -211,12 +212,13 @@ class UserAssetEndpoint(BaseAPIView):
         # get the asset id
         asset = FileAsset.objects.get(id=asset_id, user_id=request.user.id)
         # get the storage metadata
+        validate_uploaded_asset(asset)
         asset.is_uploaded = True
         # get the storage metadata
         if not asset.storage_metadata:
             get_asset_object_metadata.delay(asset_id=str(asset_id))
         # update the attributes
-        asset.attributes = request.data.get("attributes", asset.attributes)
+        asset.attributes = merge_asset_attributes(asset, request.data.get("attributes"))
         # save the asset
         asset.save(update_fields=["is_uploaded", "attributes"])
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -291,7 +293,7 @@ class UserServerAssetEndpoint(BaseAPIView):
         # get the asset key
         name = sanitize_filename(request.data.get("name")) or "unnamed"
         type = request.data.get("type", "image/jpeg")
-        size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
+        size = requested_upload_size(request.data.get("size", settings.FILE_SIZE_LIMIT))
         entity_type = request.data.get("entity_type", False)
 
         # Check if the file size is within the limit
@@ -337,7 +339,7 @@ class UserServerAssetEndpoint(BaseAPIView):
         # Get the presigned URL
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        presigned_url = storage.generate_presigned_upload(object_name=asset_key, file_type=type, file_size=size_limit)
         # Return the presigned URL
         return Response(
             {
@@ -367,12 +369,13 @@ class UserServerAssetEndpoint(BaseAPIView):
         # get the asset id
         asset = FileAsset.objects.get(id=asset_id, user_id=request.user.id)
         # get the storage metadata
+        validate_uploaded_asset(asset)
         asset.is_uploaded = True
         # get the storage metadata
         if not asset.storage_metadata:
             get_asset_object_metadata.delay(asset_id=str(asset_id))
         # update the attributes
-        asset.attributes = request.data.get("attributes", asset.attributes)
+        asset.attributes = merge_asset_attributes(asset, request.data.get("attributes"))
         # save the asset
         asset.save(update_fields=["is_uploaded", "attributes"])
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -519,7 +522,7 @@ class GenericAssetEndpoint(BaseAPIView):
         """
         name = sanitize_filename(request.data.get("name"))
         type = request.data.get("type")
-        size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
+        size = requested_upload_size(request.data.get("size", settings.FILE_SIZE_LIMIT))
         project_id = request.data.get("project_id")
         external_id = request.data.get("external_id")
         external_source = request.data.get("external_source")
@@ -606,7 +609,7 @@ class GenericAssetEndpoint(BaseAPIView):
 
         # Get the presigned URL
         storage = S3Storage(request=request)
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        presigned_url = storage.generate_presigned_upload(object_name=asset_key, file_type=type, file_size=size_limit)
 
         return Response(
             {

@@ -272,7 +272,7 @@ class TestProjectCoverBinding:
             "entity_identifier": str(project_id),
         }
         with patch("plane.app.views.asset.v2.S3Storage") as storage:
-            storage.return_value.generate_presigned_post.return_value = {}
+            storage.return_value.generate_presigned_upload.return_value = {}
             return client.post(f"/api/assets/v2/workspaces/{workspace.slug}/", payload, format="json")
 
     def test_admin_can_bind_cover_to_own_project(self, session_client, workspace, project):

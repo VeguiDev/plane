@@ -45,6 +45,8 @@ from plane.db.models import (
     WorkspaceMember,
 )
 
+pytestmark = pytest.mark.usefixtures("mock_celery")
+
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -1041,7 +1043,7 @@ class TestWorkItemAttachmentCreateGuestScope:
     @pytest.mark.django_db
     @mock.patch("plane.api.views.issue.S3Storage")
     def test_guest_allowed_create_on_own_issue(self, s3, guest_client, workspace, project, own_issue):
-        s3.return_value.generate_presigned_post.return_value = {}
+        s3.return_value.generate_presigned_upload.return_value = {}
         response = guest_client.post(
             _attachments_url(workspace, project, own_issue),
             data=_attachment_create_payload(),
@@ -1059,7 +1061,7 @@ class TestWorkItemAttachmentCreateGuestScope:
     def test_guest_with_view_all_allowed_create_on_foreign_issue(
         self, s3, guest_client, workspace, project, foreign_issue
     ):
-        s3.return_value.generate_presigned_post.return_value = {}
+        s3.return_value.generate_presigned_upload.return_value = {}
         _enable_guest_view_all(project)
         response = guest_client.post(
             _attachments_url(workspace, project, foreign_issue),
@@ -1073,7 +1075,7 @@ class TestWorkItemAttachmentCreateGuestScope:
     @pytest.mark.django_db
     @mock.patch("plane.api.views.issue.S3Storage")
     def test_admin_allowed_create_on_foreign_issue(self, s3, api_key_client, workspace, project, foreign_issue):
-        s3.return_value.generate_presigned_post.return_value = {}
+        s3.return_value.generate_presigned_upload.return_value = {}
         response = api_key_client.post(
             _attachments_url(workspace, project, foreign_issue),
             data=_attachment_create_payload(),

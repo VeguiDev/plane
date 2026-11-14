@@ -24,6 +24,7 @@ from plane.db.models import FileAsset, Issue, Workspace
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.app.permissions import allow_permission, issue_hidden_from_guest, ROLE
 from plane.settings.storage import S3Storage
+from plane.utils.asset_upload import requested_upload_size, validate_uploaded_asset
 from plane.utils.path_validator import sanitize_filename
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.utils.host import base_host
@@ -128,7 +129,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
             )
         name = sanitize_filename(request.data.get("name")) or "unnamed"
         type = request.data.get("type", False)
-        size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
+        size = requested_upload_size(request.data.get("size", settings.FILE_SIZE_LIMIT))
 
         if not type or type not in settings.ATTACHMENT_MIME_TYPES:
             return Response(
@@ -164,7 +165,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         storage = S3Storage(request=request)
 
         # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        presigned_url = storage.generate_presigned_upload(object_name=asset_key, file_type=type, file_size=size_limit)
 
         # Return the presigned URL
         return Response(
@@ -252,6 +253,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         issue_attachment = FileAsset.objects.get(
             pk=pk, workspace__slug=slug, project_id=project_id, issue_id=issue_id
         )
+        validate_uploaded_asset(issue_attachment)
         serializer = IssueAttachmentSerializer(issue_attachment)
 
         # Send this activity only if the attachment is not uploaded before
