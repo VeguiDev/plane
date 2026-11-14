@@ -26,6 +26,9 @@ from plane.authentication.middleware.oidc import recovery_allowed
 from plane.db.models import (
     OIDCIdentity,
     OIDCLoginTransaction,
+    Project,
+    ProjectMember,
+    ProjectMemberInvite,
     Session,
     User,
     Workspace,
@@ -429,6 +432,28 @@ def test_workspace_roles_and_isolation(client):
     ).status_code in {403, 404}
     assert not WorkspaceMember.objects.filter(workspace=b, member=user).exists()
     assert WorkspaceMember.objects.get(workspace=a, member=user).role == 5
+
+
+def test_accepted_project_invitation_is_scoped_and_never_grants_workspace_admin(client):
+    from plane.authentication.utils.workspace_project_join import process_workspace_project_invitations
+
+    user = oidc.resolve_user(claims())
+    owner = User.objects.create_user(username="project-owner", email="owner@example.com")
+    workspace = Workspace.objects.create(name="Invited", slug="project-invite", owner=owner)
+    project = Project.objects.create(workspace=workspace, name="Allowed", identifier="ALLOWED")
+    other = Project.objects.create(workspace=workspace, name="Other", identifier="OTHER", network=0)
+    ProjectMemberInvite.objects.create(
+        workspace=workspace, project=project, email=user.email, accepted=True, role=20, token="test-only"
+    )
+    process_workspace_project_invitations(user)
+    assert ProjectMember.objects.get(project=project, member=user).role == 15
+    assert WorkspaceMember.objects.get(workspace=workspace, member=user).role == 15
+    assert not ProjectMember.objects.filter(project=other, member=user).exists()
+    assert not ProjectMemberInvite.objects.filter(email=user.email).exists()
+    client.force_login(user)
+    assert client.get(f"/api/workspaces/{workspace.slug}/projects/").status_code == 200
+    assert client.get(f"/api/workspaces/{workspace.slug}/projects/{project.id}/").status_code == 200
+    assert client.get(f"/api/workspaces/{workspace.slug}/projects/{other.id}/").status_code in {403, 404}
 
 
 def test_only_accepted_invitations(client, instance, monkeypatch, metadata, keys):
