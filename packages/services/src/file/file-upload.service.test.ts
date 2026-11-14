@@ -68,4 +68,14 @@ describe("signed uploads", () => {
       "SignatureDoesNotMatch"
     );
   });
+
+  it("aborts the active storage request", async () => {
+    const request = vi.spyOn(axios, "request").mockResolvedValue({ data: "" });
+    const service = new FileUploadService();
+    await service.uploadFile({ method: "PUT", url, headers: {} }, file);
+    const signal = request.mock.calls[0][0].signal as AbortSignal;
+    expect(signal.aborted).toBe(false);
+    service.cancelUpload();
+    expect(signal.aborted).toBe(true);
+  });
 });

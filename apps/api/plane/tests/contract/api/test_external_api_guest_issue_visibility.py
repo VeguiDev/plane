@@ -48,6 +48,16 @@ from plane.db.models import (
 pytestmark = pytest.mark.usefixtures("mock_celery")
 
 
+@pytest.fixture(autouse=True)
+def isolated_external_dependencies(settings, monkeypatch):
+    settings.WEB_URL = "https://plane.example.test"
+    monkeypatch.setenv("AWS_S3_BUCKET_NAME", "isolated-contract-tests")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "isolated-test-only")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "isolated-test-only-secret")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.setenv("AWS_S3_ENDPOINT_URL", "https://storage.example.test")
+
+
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
