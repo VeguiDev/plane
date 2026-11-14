@@ -25,6 +25,7 @@ import { ProfileSettingsHeading } from "@/components/settings/profile/heading";
 import { authErrorHandler, EAuthenticationErrorCodes, passwordErrors } from "@/helpers/authentication.helper";
 // hooks
 import { useUser } from "@/hooks/store/user";
+import { useInstance } from "@/hooks/store/use-instance";
 // services
 import { AuthService } from "@/services/auth.service";
 
@@ -51,6 +52,7 @@ const defaultShowPassword = {
 export const SecurityProfileSettings = observer(function SecurityProfileSettings() {
   // store
   const { data: currentUser, changePassword } = useUser();
+  const { config } = useInstance();
   // states
   const [showPassword, setShowPassword] = useState(defaultShowPassword);
   const [isPasswordInputFocused, setIsPasswordInputFocused] = useState(false);
@@ -136,6 +138,15 @@ export const SecurityProfileSettings = observer(function SecurityProfileSettings
 
   return (
     <div className="size-full">
+      {config?.is_oidc_enabled && (
+        <section className="mb-8 space-y-3 border-b border-subtle pb-6">
+          <h2 className="text-h6-semibold">{t("oidc_link.title")}</h2>
+          <p>{t("oidc_link.description")}</p>
+          <a className="underline" href="/sso-link">
+            {t("oidc_link.manage")}
+          </a>
+        </section>
+      )}
       <ProfileSettingsHeading title={t("auth.common.password.change_password.label.default")} />
       <form onSubmit={handleSubmit(handleChangePassword)} className="mt-7 flex flex-col gap-8">
         <div className="flex flex-col gap-y-7">

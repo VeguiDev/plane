@@ -14,6 +14,7 @@ export const coreRoutes: RouteConfigEntry[] = [
 
   // Home - Sign In
   layout("./(home)/layout.tsx", [index("./(home)/page.tsx")]),
+  route("sso-link", "./sso-link/page.tsx"),
 
   // Sign Up
   layout("./(all)/sign-up/layout.tsx", [route("sign-up", "./(all)/sign-up/page.tsx")]),

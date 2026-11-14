@@ -60,7 +60,7 @@ from .project import (
     ProjectUserProperty,
 )
 from .session import Session
-from .oidc import OIDCIdentity, OIDCLoginTransaction
+from .oidc import OIDCIdentity, OIDCLinkConfirmation, OIDCLoginTransaction
 from .social_connection import SocialLoginConnection
 from .state import State, StateGroup, DEFAULT_STATES
 from .user import Account, Profile, User, BotTypeEnum

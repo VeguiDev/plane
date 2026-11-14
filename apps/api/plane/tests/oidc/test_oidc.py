@@ -25,6 +25,7 @@ from plane.authentication import oidc
 from plane.authentication.middleware.oidc import recovery_allowed
 from plane.db.models import (
     OIDCIdentity,
+    OIDCLinkConfirmation,
     OIDCLoginTransaction,
     Project,
     ProjectMember,
@@ -416,6 +417,259 @@ def test_issuer_change_invalidates_session(client, settings):
     session.save()
     settings.OIDC_ISSUER = "https://different.example/"
     assert client.get("/api/users/me/").status_code in {401, 403}
+
+
+def local_account(client, *, email="local@example.com", age=0):
+    user = User.objects.create_user(username=email, email=email, password="isolated-test-password")
+    client.force_login(user)
+    session = client.session
+    session["account_auth"] = {"user_id": str(user.pk), "at": int(time.time()) - age}
+    session.save()
+    return user
+
+
+def prepare_link(client, monkeypatch, metadata, keys, **overrides):
+    install_provider(monkeypatch, metadata, keys)
+    response = client.post("/auth/oidc/link/", {"next_path": "/test-workspace/"})
+    assert response.status_code == 302
+    query = parse_qs(urlsplit(response.url).query)
+    assert query["prompt"] == ["login"] and query["max_age"] == ["0"]
+    row = OIDCLoginTransaction.objects.get()
+    assert row.purpose == "link"
+    install_provider(monkeypatch, metadata, keys, claims(nonce=row.nonce, auth_time=int(time.time()), **overrides))
+    return query["state"][0]
+
+
+def test_existing_account_redirects_to_link_without_automatic_link(client, instance, monkeypatch, metadata, keys):
+    User.objects.create_user(username="one", email="one@example.com")
+    state = start(client, monkeypatch, metadata, keys)
+    row = OIDCLoginTransaction.objects.get()
+    install_provider(monkeypatch, metadata, keys, claims(nonce=row.nonce))
+    response = client.get("/auth/oidc/callback/", {"code": "code", "state": state})
+    assert response.status_code == 302
+    assert urlsplit(response.url).path == "/sso-link"
+    assert parse_qs(urlsplit(response.url).query)["reason"] == ["account_link_required"]
+    assert not OIDCIdentity.objects.exists()
+    assert not OIDCLinkConfirmation.objects.exists()
+
+
+def test_self_link_requires_confirmation_and_preserves_account(client, instance, monkeypatch, metadata, keys):
+    user = local_account(client)
+    password = user.password
+    before = User.objects.count()
+    state = prepare_link(client, monkeypatch, metadata, keys)
+    old_key = client.session.session_key
+    response = client.get("/auth/oidc/callback/", {"code": "code", "state": state})
+    assert response.status_code == 302
+    assert not OIDCIdentity.objects.exists()
+    status = client.get("/auth/oidc/link/").json()
+    assert status["identity_email"] == "one@example.com"
+    assert status["account_email"] == "local@example.com"
+    assert client.post("/auth/oidc/link/confirm/").json() == {"linked": True}
+    assert OIDCIdentity.objects.get().user_id == user.pk
+    assert not OIDCLinkConfirmation.objects.exists()
+    assert client.session.session_key != old_key
+    assert User.objects.count() == before
+    user.refresh_from_db()
+    assert user.email == "local@example.com" and user.password == password
+    assert not InstanceAdmin.objects.filter(user=user).exists()
+    assert client.post("/auth/oidc/link/confirm/").status_code == 400
+    assert client.get("/auth/oidc/callback/", {"code": "code", "state": state}).status_code == 400
+
+
+@pytest.mark.parametrize("age", [601, -100])
+def test_link_rejects_stale_or_future_local_auth(client, age):
+    local_account(client, age=age)
+    assert client.get("/auth/oidc/link/").json()["recent_auth"] is False
+    assert "reauthentication_required" in client.post("/auth/oidc/link/").url
+    assert not OIDCLoginTransaction.objects.exists()
+
+
+@pytest.mark.parametrize("path", ["link/", "link/confirm/", "link/cancel/"])
+def test_link_endpoints_require_csrf(path):
+    assert Client(enforce_csrf_checks=True).post("/auth/oidc/" + path).status_code == 403
+
+
+def test_link_get_does_not_start_authorization(client):
+    assert client.get("/auth/oidc/link/").status_code == 401
+    local_account(client)
+    assert client.get("/auth/oidc/link/").status_code == 200
+    assert not OIDCLoginTransaction.objects.exists()
+
+
+@pytest.mark.parametrize("change", ["user", "session", "expiry", "issuer"])
+def test_link_confirmation_bound_to_user_session_expiry_and_issuer(client, settings, change):
+    user = local_account(client)
+    row = OIDCLinkConfirmation.objects.create(
+        user=user,
+        session_hash=oidc.digest(client.session.session_key),
+        issuer=ISSUER,
+        subject="subject-1",
+        email="one@example.com",
+        expires_at=timezone.now() + timedelta(minutes=5),
+    )
+    session = client.session
+    session["oidc_link_confirmation"] = str(row.pk)
+    session.save()
+    if change == "user":
+        other = User.objects.create_user(username="other", email="other@example.com")
+        row.user = other
+    elif change == "session":
+        row.session_hash = oidc.digest("different-session")
+    elif change == "expiry":
+        row.expires_at = timezone.now() - timedelta(seconds=1)
+    else:
+        row.issuer = "https://other.example/"
+    row.save()
+    assert client.post("/auth/oidc/link/confirm/").status_code == 400
+    assert not OIDCIdentity.objects.exists()
+
+
+def test_link_rejects_identity_owned_by_another_user(client, monkeypatch, metadata, keys):
+    local_account(client)
+    owner = User.objects.create_user(username="owner", email="owner@example.com")
+    OIDCIdentity.objects.create(user=owner, issuer=ISSUER, subject="subject-1")
+    state = prepare_link(client, monkeypatch, metadata, keys)
+    response = client.get("/auth/oidc/callback/", {"code": "code", "state": state})
+    assert "identity_already_linked" in response.url
+    assert OIDCIdentity.objects.get().user_id == owner.pk
+    assert not OIDCLinkConfirmation.objects.exists()
+
+
+def test_link_cancel_discards_pending_identity(client, monkeypatch, metadata, keys):
+    local_account(client)
+    state = prepare_link(client, monkeypatch, metadata, keys)
+    client.get("/auth/oidc/callback/", {"code": "code", "state": state})
+    assert OIDCLinkConfirmation.objects.exists()
+    assert client.post("/auth/oidc/link/cancel/").status_code == 200
+    assert client.post("/auth/oidc/link/confirm/").status_code == 400
+    assert not OIDCIdentity.objects.exists()
+
+
+def test_link_callback_rejects_different_logged_in_user(client, monkeypatch, metadata, keys):
+    local_account(client)
+    state = prepare_link(client, monkeypatch, metadata, keys)
+    other = User.objects.create_user(username="other", email="other@example.com")
+    client.force_login(other)
+    response = client.get("/auth/oidc/callback/", {"code": "code", "state": state})
+    assert response.status_code == 400  # login rotates/flushes the browser session
+    assert not OIDCLinkConfirmation.objects.exists()
+
+
+def test_link_requires_fresh_idp_authentication(monkeypatch, metadata, keys):
+    install_provider(monkeypatch, metadata, keys)
+    row = pending()
+    row.purpose = "link"
+    with pytest.raises(oidc.OIDCError, match="idp_reauthentication_required"):
+        oidc.exchange(RequestFactory().get("/auth/oidc/callback/", {"code": "code"}), row)
+
+
+def test_confirmation_rechecks_identity_ownership(client, monkeypatch, metadata, keys):
+    local_account(client)
+    state = prepare_link(client, monkeypatch, metadata, keys)
+    client.get("/auth/oidc/callback/", {"code": "code", "state": state})
+    owner = User.objects.create_user(username="owner", email="owner@example.com")
+    OIDCIdentity.objects.create(user=owner, issuer=ISSUER, subject="subject-1")
+    assert client.post("/auth/oidc/link/confirm/").status_code == 400
+    assert OIDCIdentity.objects.get().user_id == owner.pk
+
+
+def test_login_helper_marks_only_non_oidc_authentication(client):
+    from plane.authentication.utils.login import user_login
+
+    user = local_account(client)
+    request = RequestFactory().post("/auth/sign-in/")
+    request.session = client.session
+    user_login(request, user, is_app=True)
+    assert request.session["account_auth"]["user_id"] == str(user.pk)
+    request.path = "/auth/oidc/callback/"
+    user_login(request, user, is_app=True)
+    assert "account_auth" not in request.session
+
+
+def test_link_does_not_replace_existing_subject(client, monkeypatch, metadata, keys):
+    user = local_account(client)
+    OIDCIdentity.objects.create(user=user, issuer=ISSUER, subject="original-subject")
+    state = prepare_link(client, monkeypatch, metadata, keys)
+    response = client.get("/auth/oidc/callback/", {"code": "code", "state": state})
+    assert "account_already_linked" in response.url
+    assert OIDCIdentity.objects.get().subject == "original-subject"
+
+
+def test_link_confirmation_rejects_expired_local_auth(client, monkeypatch, metadata, keys):
+    local_account(client)
+    state = prepare_link(client, monkeypatch, metadata, keys)
+    client.get("/auth/oidc/callback/", {"code": "code", "state": state})
+    session = client.session
+    session["account_auth"]["at"] = int(time.time()) - 601
+    session.save()
+    assert client.post("/auth/oidc/link/confirm/").status_code == 400
+    assert not OIDCIdentity.objects.exists()
+
+
+def test_link_callback_cancellation_is_friendly(client, monkeypatch, metadata, keys):
+    local_account(client)
+    state = prepare_link(client, monkeypatch, metadata, keys)
+    response = client.get("/auth/oidc/callback/", {"error": "access_denied", "state": state})
+    assert "authorization_failed" in response.url
+    assert not OIDCLoginTransaction.objects.exists()
+    assert not OIDCIdentity.objects.exists()
+
+
+def test_link_preserves_verified_email_requirement(client, monkeypatch, metadata, keys):
+    local_account(client)
+    state = prepare_link(client, monkeypatch, metadata, keys, email_verified=False)
+    response = client.get("/auth/oidc/callback/", {"code": "code", "state": state})
+    assert "verified_email_required" in response.url
+    assert not OIDCLinkConfirmation.objects.exists()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("same_account", [False, True])
+def test_concurrent_link_confirmations_cannot_steal_or_replay(client, same_account):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from django.db import close_old_connections
+    from plane.authentication import oidc_link
+
+    user = local_account(client)
+    other = user if same_account else User.objects.create_user(username="other", email="other@example.com")
+    users = [user, other]
+    confirmations = []
+    for index, account in enumerate(users):
+        if same_account and index:
+            confirmations.append(confirmations[0])
+            continue
+        confirmations.append(OIDCLinkConfirmation.objects.create(
+            user=account, issuer=ISSUER, subject="subject-1", email="one@example.com",
+            session_hash=oidc.digest(f"session-{index}"), expires_at=timezone.now() + timedelta(minutes=5),
+        ))
+    barrier = Barrier(2)
+
+    def confirm(index):
+        close_old_connections()
+        try:
+            session_index = 0 if same_account else index
+            session = SessionStore()
+            session["account_auth"] = {"user_id": str(users[index].pk), "at": int(time.time())}
+            session["oidc_link_confirmation"] = str(confirmations[index].pk)
+            # Use a lightweight session mock; rotation itself is covered by the HTTP test.
+            session_mock = SimpleNamespace(
+                session_key=f"session-{session_index}", get=session.get, pop=session.pop, cycle_key=lambda: None,
+            )
+            request = SimpleNamespace(user=users[index], session=session_mock)
+            barrier.wait(timeout=5)
+            try:
+                oidc_link.confirm(request)
+                return True
+            except oidc.OIDCError:
+                return False
+        finally:
+            close_old_connections()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(confirm, range(2))) == [False, True]
+    assert OIDCIdentity.objects.count() == 1
 
 
 def test_workspace_roles_and_isolation(client):

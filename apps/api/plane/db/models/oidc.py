@@ -32,7 +32,24 @@ class OIDCLoginTransaction(models.Model):
     redirect_uri = models.URLField(max_length=1024)
     next_path = models.CharField(max_length=500, default="")
     target = models.CharField(max_length=10, default="app")
+    purpose = models.CharField(max_length=10, default="login")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.CASCADE)
     expires_at = models.DateTimeField(db_index=True)
 
     class Meta:
         db_table = "oidc_login_transactions"
+
+
+class OIDCLinkConfirmation(models.Model):
+    """Verified identity awaiting explicit consent. Never stores provider tokens."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    session_hash = models.CharField(max_length=64)
+    issuer = models.CharField(max_length=512)
+    subject = models.CharField(max_length=255)
+    email = models.EmailField(max_length=255)
+    expires_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        db_table = "oidc_link_confirmations"

@@ -120,7 +120,7 @@ def discovery():
     return metadata
 
 
-def begin(request, target):
+def begin(request, target, *, purpose="login"):
     redirect = configuration(target)
     metadata = discovery()
     if not request.session.session_key:
@@ -138,8 +138,12 @@ def begin(request, target):
         verifier=verifier,
         redirect_uri=redirect,
         target=target,
+        purpose=purpose,
+        user=request.user if purpose == "link" else None,
         expires_at=now + timedelta(minutes=5),
-        next_path=validate_next_path(request.GET.get("next_path", "")) if target == "app" else "",
+        next_path=validate_next_path((request.POST if purpose == "link" else request.GET).get("next_path", ""))
+        if target == "app"
+        else "",
     )
     scopes = set(settings.OIDC_SCOPES.split()) | {"openid", "email"}
     scopes.discard("offline_access")
@@ -153,6 +157,9 @@ def begin(request, target):
         "code_challenge_method": "S256",
         "code_challenge": base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode(),
     }
+    if purpose == "link":
+        # Require a new IdP authentication, not a silent login in a shared browser.
+        params.update(prompt="login", max_age="0")
     return metadata["authorization_endpoint"] + "?" + urlencode(params)
 
 
@@ -235,6 +242,10 @@ def exchange(request, pending):
         )
         if not isinstance(claims["nonce"], str) or not secrets.compare_digest(claims["nonce"], pending.nonce):
             raise OIDCError("invalid_nonce")
+        if getattr(pending, "purpose", "login") == "link":
+            auth_time = claims.get("auth_time")
+            if not isinstance(auth_time, (int, float)) or not 0 <= time.time() - auth_time <= 300:
+                raise OIDCError("idp_reauthentication_required")
         audiences = claims["aud"] if isinstance(claims["aud"], list) else [claims["aud"]]
         if (len(audiences) > 1 or "azp" in claims) and claims.get("azp") != settings.OIDC_CLIENT_ID:
             raise OIDCError("invalid_token")
@@ -280,10 +291,10 @@ def resolve_user(claims, target="app"):
         if not user.is_active or user.is_bot:
             raise OIDCError("account_disabled")
     else:
-        if target == "admin" or not settings.OIDC_AUTO_PROVISION:
-            raise OIDCError("provisioning_disabled")
         if User.objects.filter(email__iexact=email).exists():
             raise OIDCError("account_link_required")
+        if target == "admin" or not settings.OIDC_AUTO_PROVISION:
+            raise OIDCError("provisioning_disabled")
         try:
             with transaction.atomic():
                 user = User(

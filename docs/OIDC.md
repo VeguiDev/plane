@@ -53,14 +53,55 @@ instancia y el primer administrador con login local antes de habilitar exclusivi
 Recrear API/workers al cambiar configuración para recargar entorno y caché pública.
 
 El botón puede ocultarse sin deshabilitar el endpoint. El texto es configurable;
-ningún secreto se entrega en la configuración pública. Los errores del callback
-son JSON con códigos seguros, sin tokens ni respuestas del proveedor.
+ningún secreto se entrega en la configuración pública. Los errores de vinculación
+redirigen a una pantalla segura; los demás errores del callback son JSON con
+códigos seguros, sin tokens ni respuestas del proveedor.
 
 ## Cuentas existentes: no vincular automáticamente por email
 
 Si coincide el email de una cuenta local, se rechaza JIT con
-`account_link_required`. El operador debe verificar por un canal independiente la
-identidad y el `sub` exacto en authentik, y ejecutar desde la consola de confianza:
+`account_link_required` y se redirige a `/sso-link`. No se reutiliza la identidad de
+ese intento para vincular una cuenta.
+
+### Vinculación por el propio usuario
+
+También está disponible en **Configuración de perfil → Seguridad → Ancen SSO**:
+
+1. Ingresar con un método **ya habilitado** para la cuenta existente. No se activan
+   métodos deshabilitados por God Mode. Quien todavía no tenga usuario en authentik
+   puede seguir usando su acceso actual sin vincular nada.
+2. Elegir **Vincular Ancen SSO**. Se exige autenticación de esa cuenta en la misma
+   sesión durante los últimos diez minutos; sesiones anteriores a esta versión
+   requieren cerrar sesión y volver a ingresar. No se usa `User.last_login_time`
+   como prueba, porque otra sesión del mismo usuario podría actualizarlo.
+3. Completar **otra autorización** OIDC, con `prompt=login`, `max_age=0`, PKCE S256
+   y nonce nuevos. Se exige `auth_time` firmado de los últimos cinco minutos,
+   además de firma, issuer, audiencia y correo realmente verificado. Un proveedor
+   que omita `auth_time` no puede completar la vinculación.
+4. Revisar el correo de la cuenta Plane y el correo SSO verificado; confirmar
+   explícitamente. Pueden diferir: la autorización deriva de controlar ambas
+   cuentas, **nunca** de comparar sus correos. Cancelar no modifica identidades.
+
+La confirmación dura cinco minutos, está ligada al usuario y a la clave de sesión,
+y se consume una sola vez. Inicio, confirmación y cancelación son POST con CSRF;
+consultar el estado no inicia autorizaciones. Cambiar usuario, sesión o issuer,
+desactivar la cuenta o expirar cualquiera de las pruebas invalida el flujo.
+Los bloqueos de base de datos y la unicidad `(issuer, subject)` impiden apropiarse
+de identidades durante intentos concurrentes. No se permite reemplazar o
+desvincular una identidad existente desde esta pantalla.
+
+Solo se agrega `OIDCIdentity`: no se crean usuarios ni se cambian contraseña,
+correo, roles, membresías o permisos de God Mode. No se guardan tokens del proveedor.
+La confirmación pendiente guarda solo issuer, subject y correo verificado, y las
+filas expiradas se purgan al iniciar una confirmación nueva. Los logs de auditoría
+contienen IDs, no tokens ni claims completos. Los métodos existentes siguen bajo
+los controles de God Mode y `OIDC_ALLOW_LOCAL_LOGIN`.
+
+### Vinculación asistida por operador
+
+Si el acceso existente está deshabilitado o no está disponible, el operador debe
+verificar por un canal independiente la identidad y el `sub` exacto en authentik,
+y ejecutar desde la consola de confianza:
 
 ```sh
 docker compose -f docker-compose.production.yml exec api python manage.py oidc_link_identity \
@@ -71,6 +112,23 @@ docker compose -f docker-compose.production.yml exec api python manage.py oidc_l
 Se auditan IDs; no permite reasignar una identidad. No alcanza con conocer el email
 ni se confía en claims de privilegios. Para administradores vincular primero su
 cuenta local ya existente; JIT no otorga God Mode.
+
+### Despliegue y rollback de esta funcionalidad
+
+La migración **0127_oidc_self_service_link** es aditiva: agrega propósito/usuario a
+las transacciones y una tabla de confirmaciones. Aplicarla con una copia de seguridad
+verificada antes de iniciar la nueva API; no ejecuta vinculación ni modifica usuarios.
+Publicar y probar una imagen candidata inmutable antes del despliegue controlado.
+Los textos están traducidos al español e inglés; los demás idiomas incluyen
+textos de respaldo en inglés y mantienen la misma estructura de claves.
+
+Para volver a la imagen anterior, detener primero la API nueva e invalidar las
+transacciones pendientes de propósito `link` y todas las confirmaciones desde una
+consola de confianza. La imagen antigua no reconoce ese propósito. Se puede dejar
+el esquema aditivo instalado: no eliminar identidades ya confirmadas ni revertir
+datos de usuarios. Esta implementación no aplica migraciones en producción ni
+despliega imágenes automáticamente. La instrumentación temporal del diagnóstico
+OIDC, si sigue en un contenedor anterior, debe eliminarse durante el despliegue.
 
 ## Exclusividad y recuperación
 

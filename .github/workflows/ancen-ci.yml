@@ -49,7 +49,7 @@ jobs:
             pgsty/silo:RELEASE.2026-09-16T00-00-00Z server /export
           uv run python -c 'import urllib.request,time; exec("for attempt in range(60):\n try:\n  urllib.request.urlopen(\"http://127.0.0.1:59000/minio/health/live\",timeout=2); break\n except Exception:\n  time.sleep(1)\nelse:\n raise SystemExit(\"Storage not healthy\")")'
       - run: uv run python -m unittest discover -s ../../scripts/ancen -p 'test_*.py'
-      - run: uv run ruff check plane/authentication/oidc.py plane/authentication/middleware/oidc.py plane/authentication/views/oidc.py plane/authentication/management plane/db/models/oidc.py plane/settings/oidc.py plane/tests/oidc plane/settings/storage.py plane/utils/asset_upload.py plane/tests/unit/settings/test_presigned_upload.py plane/tests/unit/settings/test_upload_endpoints.py plane/tests/unit/settings/test_upload_roundtrip.py ../../scripts/ancen
+      - run: uv run ruff check plane/authentication/oidc.py plane/authentication/oidc_link.py plane/authentication/middleware/oidc.py plane/authentication/views/oidc.py plane/authentication/management plane/db/models/oidc.py plane/settings/oidc.py plane/tests/oidc plane/settings/storage.py plane/utils/asset_upload.py plane/tests/unit/settings/test_presigned_upload.py plane/tests/unit/settings/test_upload_endpoints.py plane/tests/unit/settings/test_upload_roundtrip.py ../../scripts/ancen
       - run: uv run python manage.py makemigrations --check --dry-run
       - run: uv run pytest plane/tests/oidc/ plane/tests/unit/bg_tasks/test_ssrf_advisories.py plane/tests/unit/settings/ -q
         env:

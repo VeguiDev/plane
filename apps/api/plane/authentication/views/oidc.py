@@ -5,6 +5,7 @@
 import logging
 import time
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.auth import logout
@@ -14,13 +15,14 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 
-from plane.authentication import oidc
+from plane.authentication import oidc, oidc_link
 from plane.authentication.rate_limit import authentication_throttle_allows
 from plane.authentication.utils.host import base_host
 from plane.authentication.utils.login import user_login
 from plane.authentication.utils.user_auth_workflow import post_user_auth_workflow
 from plane.license.models import Instance
 from plane.utils.path_validator import get_safe_redirect_url
+from plane.db.models import OIDCIdentity
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,14 @@ def target_for(request):
 def failure(exc):
     logger.warning("oidc_login_failed reason=%s", exc)
     response = JsonResponse({"error": str(exc)}, status=400)
+    response["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+def link_page(reason="", next_path=""):
+    # Internal fixed route: no provider identifiers or tokens in browser URLs.
+    params = urlencode({"reason": reason, "next_path": next_path})
+    response = HttpResponseRedirect(settings.APP_BASE_URL.rstrip("/") + "/sso-link?" + params)
     response["Referrer-Policy"] = "no-referrer"
     return response
 
@@ -60,11 +70,19 @@ class OIDCCallbackEndpoint(View):
         if not authentication_throttle_allows(request):
             return JsonResponse({"error": "rate_limit_exceeded"}, status=429)
         target = target_for(request)
+        pending = None
         try:
             # Consume before network access: replay and concurrent callbacks fail.
             pending = oidc.consume(request, target)
             target = pending.target
+            if pending.purpose == "link":
+                oidc_link.require_recent_account_auth(request)
+                if pending.user_id != request.user.pk or target != "app":
+                    raise oidc.OIDCError("invalid_state")
             claims = oidc.exchange(request, pending)
+            if pending.purpose == "link":
+                oidc_link.prepare_confirmation(request, pending, claims)
+                return link_page(next_path=pending.next_path)
             user = oidc.resolve_user(claims, target)
             if target != "admin" and user.is_email_verified and user.email == oidc.verified_email(claims):
                 post_user_auth_workflow(user, False, request)
@@ -86,7 +104,65 @@ class OIDCCallbackEndpoint(View):
             logger.info("oidc_login_succeeded user_id=%s target=%s", user.pk, target)
             return response
         except oidc.OIDCError as exc:
+            if str(exc) == "account_link_required" or (pending is not None and pending.purpose == "link"):
+                logger.warning("oidc_link_flow_failed reason=%s", exc)
+                return link_page(str(exc), pending.next_path if pending else "")
             return failure(exc)
+
+
+@method_decorator([never_cache, csrf_protect], name="dispatch")
+class OIDCLinkEndpoint(View):
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "authentication_required"}, status=401)
+        recent = True
+        try:
+            oidc_link.require_recent_account_auth(request)
+        except oidc.OIDCError:
+            recent = False
+        pending = oidc_link.pending_confirmation(request)
+        return JsonResponse(
+            {
+                "enabled": settings.OIDC_ENABLED,
+                "linked": OIDCIdentity.objects.filter(user=request.user, issuer=settings.OIDC_ISSUER).exists(),
+                "recent_auth": recent,
+                "account_email": request.user.email,
+                "identity_email": pending.email if pending else None,
+            }
+        )
+
+    def post(self, request):
+        if not authentication_throttle_allows(request):
+            return JsonResponse({"error": "rate_limit_exceeded"}, status=429)
+        try:
+            oidc_link.require_recent_account_auth(request)
+            oidc_link.cancel(request)
+            response = HttpResponseRedirect(oidc.begin(request, "app", purpose="link"))
+            response["Referrer-Policy"] = "no-referrer"
+            return response
+        except oidc.OIDCError as exc:
+            return link_page(str(exc))
+
+
+@method_decorator([never_cache, csrf_protect], name="dispatch")
+class OIDCLinkConfirmEndpoint(View):
+    def post(self, request):
+        if not authentication_throttle_allows(request):
+            return JsonResponse({"error": "rate_limit_exceeded"}, status=429)
+        try:
+            oidc_link.confirm(request)
+            return JsonResponse({"linked": True})
+        except oidc.OIDCError as exc:
+            return failure(exc)
+
+
+@method_decorator([never_cache, csrf_protect], name="dispatch")
+class OIDCLinkCancelEndpoint(View):
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "authentication_required"}, status=401)
+        oidc_link.cancel(request)
+        return JsonResponse({"cancelled": True})
 
 
 @method_decorator([never_cache, csrf_protect], name="dispatch")
