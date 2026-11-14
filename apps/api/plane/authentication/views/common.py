@@ -4,6 +4,7 @@
 
 # Django imports
 from django.shortcuts import render
+from django.http import JsonResponse
 
 # Third party imports
 from rest_framework import status
@@ -38,6 +39,8 @@ class CSRFTokenEndpoint(APIView):
 
 def csrf_failure(request, reason=""):
     """Custom CSRF failure view"""
+    if request.path.startswith(("/auth/oidc/", "/api/instances/oidc/")):
+        return JsonResponse({"error": "csrf_failed"}, status=403)
     return render(
         request,
         "csrf_failure.html",

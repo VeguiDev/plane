@@ -1,0 +1,25 @@
+# Isolated dependencies for OIDC tests. No production credentials or host data.
+name: ancen-oidc-tests
+services:
+  db:
+    image: postgres:15.7-alpine
+    environment:
+      POSTGRES_USER: oidctest
+      POSTGRES_PASSWORD: isolated-test-only
+      POSTGRES_DB: oidctest
+    ports: ["127.0.0.1:${OIDC_TEST_DB_PORT:-55439}:5432"]
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U oidctest"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: valkey/valkey:7.2.11-alpine
+    ports: ["127.0.0.1:${OIDC_TEST_REDIS_PORT:-56389}:6379"]
+    tmpfs: [/data]
+    healthcheck:
+      test: [CMD, valkey-cli, ping]
+      interval: 2s
+      timeout: 3s
+      retries: 30

@@ -1,0 +1,59 @@
+name: Ancen stable promotion
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'VeguiDev/plane' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.gate.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - id: gate
+        env:
+          VERIFIED_SHA: ${{ vars.ANCEN_AUTHENTIK_VERIFIED_SHA }}
+        run: |
+          test "$VERIFIED_SHA" = "$GITHUB_SHA"
+          version=$(cat .ancen/version)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+  promote:
+    needs: verify
+    environment: ancen-stable
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      matrix:
+        component: [frontend, admin, space, live, backend, proxy]
+    steps:
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - env:
+          COMPONENT: ${{ matrix.component }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          image="ghcr.io/veguidev/plane-$COMPONENT"
+          digest=$(docker buildx imagetools inspect "$image:sha-$GITHUB_SHA" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          cosign verify "$image@$digest" --certificate-identity "https://github.com/VeguiDev/plane/.github/workflows/ancen-images.yml@refs/heads/main" --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          docker buildx imagetools create --prefer-index=false -t "$image:$VERSION" -t "$image:latest" "$image@$digest"
+  release:
+    needs: [verify, promote]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: gh release create "ancen-v$VERSION" --target "$GITHUB_SHA" --title "Ancen Plane $VERSION" --generate-notes

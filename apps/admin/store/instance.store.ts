@@ -60,6 +60,7 @@ export class InstanceStore implements IInstanceStore {
       error: observable.ref,
       instanceStatus: observable,
       instance: observable,
+      config: observable.ref,
       instanceAdmins: observable,
       instanceConfigurations: observable,
       // computed
@@ -184,7 +185,7 @@ export class InstanceStore implements IInstanceStore {
       const response = await this.instanceService.updateConfigurations(data);
       runInAction(() => {
         this.instanceConfigurations = this.instanceConfigurations?.map((config) => {
-          const item = response.find((item) => item.key === config.key);
+          const item = response.find((entry) => entry.key === config.key);
           if (item) return item;
           return config;
         });

@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 from django.urls import path
+from plane.authentication.views.oidc import OIDCStartEndpoint, OIDCCallbackEndpoint, OIDCLogoutEndpoint, OIDCSessionEndpoint
 
 from plane.license.api.views import (
     EmailCredentialCheckEndpoint,
@@ -21,6 +22,10 @@ from plane.license.api.views import (
 )
 
 urlpatterns = [
+    path("oidc/", OIDCStartEndpoint.as_view(), name="admin-oidc-start"),
+    path("oidc/callback/", OIDCCallbackEndpoint.as_view(), name="admin-oidc-callback"),
+    path("oidc/logout/", OIDCLogoutEndpoint.as_view(), name="admin-oidc-logout"),
+    path("oidc/session/", OIDCSessionEndpoint.as_view(), name="admin-oidc-session"),
     path("", InstanceEndpoint.as_view(), name="instance"),
     path("admins/", InstanceAdminEndpoint.as_view(), name="instance-admins"),
     path("admins/me/", InstanceAdminUserMeEndpoint.as_view(), name="instance-admins"),

@@ -1,5 +1,17 @@
 # Agent Development Guide
 
+## Ancen Plane fork
+
+- Upstream Community Edition only: https://github.com/makeplane/plane. Preserve AGPL and copyright.
+- Fork version: `.ancen/version`; exact upstream base: `.ancen/upstream.json`.
+- Use `feature/*` / `upstream-sync/*`; Ancen PRs target `main`, never force-push.
+- Never auto-link OIDC accounts by email or grant workspace/instance roles from claims.
+- Keep local login enabled until real SSO AND restricted recovery have been validated.
+- Never modify authentik or deploy production without operator intervention.
+- Run `plane/tests/oidc` against isolated DB/Redis and frontend type/lint/build checks.
+- See `docs/OIDC.md`, `docs/DEPLOYMENT.md`, `docs/UPSTREAM_SYNC.md`, `docs/SECURITY.md`.
+- Never label preview/candidate code stable or publish latest without the stable gate.
+
 ## Commands
 
 - `pnpm dev` - Start all dev servers (web:3000, admin:3001, space:3002, live:3100); the API runs in Docker via `docker-compose-local.yml` on :8000

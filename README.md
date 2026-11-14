@@ -1,3 +1,26 @@
+# Ancen Plane
+
+Fork open source de **Plane Community Edition**, mantenido por VeguiDev, con OIDC
+para authentik, imágenes GHCR y actualización upstream mediante PRs.
+
+**Estado: candidato 0.1.0-rc.1; no release estable ni despliegue de producción.**
+No deshabilitar login local hasta validar SSO real y recuperación administrativa.
+Licencia AGPL-3.0; se conservan abajo la presentación y atribuciones de upstream.
+
+- [Arquitectura](docs/ARCHITECTURE.md) · [OIDC/authentik](docs/OIDC.md)
+- [GHCR, Compose, Coolify, backups y rollback](docs/DEPLOYMENT.md)
+- [Mantenimiento upstream y conexión opcional de Codex](docs/UPSTREAM_SYNC.md)
+- [Seguridad](docs/SECURITY.md) · [Configuración](.env.example)
+- [Repositorio](https://github.com/VeguiDev/plane) · [Workflows](https://github.com/VeguiDev/plane/actions)
+- [Upstream original](https://github.com/makeplane/plane)
+
+Los componentes propios son `ghcr.io/veguidev/plane-{frontend,admin,space,live,backend,proxy}`.
+Su disponibilidad depende de un workflow **Ancen images** exitoso; no se publican
+credenciales ni se utiliza authentik real en CI. Las imágenes de este fork no
+incluyen componentes propietarios.
+
+---
+
 <br /><br />
 
 <p align="center">

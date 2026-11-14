@@ -31,11 +31,22 @@ export const useCoreOAuthConfig = (oauthActionText: string): TOAuthConfigs => {
   const isOAuthEnabled =
     (config &&
       (config?.is_google_enabled ||
+        (config?.is_oidc_enabled && config?.oidc_show_button) ||
         config?.is_github_enabled ||
         config?.is_gitlab_enabled ||
         config?.is_gitea_enabled)) ||
     false;
   const oAuthOptions: TOAuthOption[] = [
+    {
+      id: "oidc",
+      text: config?.oidc_button_text || "Continuar con Ancen SSO",
+      icon: <span aria-hidden="true">↗</span>,
+      onClick: () => {
+        const query = next_path ? `?${new URLSearchParams({ next_path }).toString()}` : "";
+        window.location.assign(`${API_BASE_URL}/auth/oidc/${query}`);
+      },
+      enabled: config?.is_oidc_enabled && config?.oidc_show_button,
+    },
     {
       id: "google",
       text: `${oauthActionText} with Google`,

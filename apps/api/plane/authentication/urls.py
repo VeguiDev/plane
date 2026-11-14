@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 from django.urls import path
+from .views.oidc import OIDCStartEndpoint, OIDCCallbackEndpoint, OIDCLogoutEndpoint, OIDCSessionEndpoint
 
 from .views import (
     CSRFTokenEndpoint,
@@ -47,6 +48,10 @@ from .views import (
 )
 
 urlpatterns = [
+    path("oidc/", OIDCStartEndpoint.as_view(), name="oidc-start"),
+    path("oidc/callback/", OIDCCallbackEndpoint.as_view(), name="oidc-callback"),
+    path("oidc/logout/", OIDCLogoutEndpoint.as_view(), name="oidc-logout"),
+    path("oidc/session/", OIDCSessionEndpoint.as_view(), name="oidc-session"),
     # credentials
     path("sign-in/", SignInAuthEndpoint.as_view(), name="sign-in"),
     path("sign-up/", SignUpAuthEndpoint.as_view(), name="sign-up"),

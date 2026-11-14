@@ -125,6 +125,15 @@ class InstanceEndpoint(BaseAPIView):
         data["is_gitea_enabled"] = IS_GITEA_ENABLED == "1"
         data["is_magic_login_enabled"] = ENABLE_MAGIC_LINK_LOGIN == "1"
         data["is_email_password_enabled"] = ENABLE_EMAIL_PASSWORD == "1"
+        data["is_oidc_enabled"] = settings.OIDC_ENABLED
+        data["oidc_show_button"] = settings.OIDC_SHOW_BUTTON
+        data["oidc_provider_name"] = settings.OIDC_PROVIDER_NAME
+        data["oidc_button_text"] = settings.OIDC_BUTTON_TEXT
+        data["oidc_allow_local_login"] = settings.OIDC_ALLOW_LOCAL_LOGIN
+        if settings.OIDC_ENABLED and not settings.OIDC_ALLOW_LOCAL_LOGIN:
+            for key in ("is_google_enabled", "is_github_enabled", "is_gitlab_enabled", "is_gitea_enabled",
+                        "is_magic_login_enabled", "is_email_password_enabled", "enable_signup"):
+                data[key] = False
 
         # Github app name
         data["github_app_name"] = str(GITHUB_APP_NAME)

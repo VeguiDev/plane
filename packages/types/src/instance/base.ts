@@ -45,6 +45,11 @@ export interface IInstance {
 }
 
 export interface IInstanceConfig {
+  is_oidc_enabled?: boolean;
+  oidc_show_button?: boolean;
+  oidc_provider_name?: string;
+  oidc_button_text?: string;
+  oidc_allow_local_login?: boolean;
   enable_signup: boolean;
   is_workspace_creation_disabled: boolean;
   is_google_enabled: boolean;
